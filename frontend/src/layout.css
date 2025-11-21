@@ -1,0 +1,115 @@
+:root {
+  --bg: #f8fafc;
+  --panel: #ffffff;
+  --border: #e2e8f0;
+  --muted: #64748b;
+  --ink: #0f172a;
+}
+
+.app-shell {
+  height: 100vh;
+  background: var(--bg);
+  display: grid;
+  grid-template-columns: 320px 1fr;
+}
+
+.sidebar {
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.main {
+  height: 100%; 
+  overflow: auto;
+  padding: 16px;
+  overflow: auto;
+  min-width: 0;
+}
+
+/* Editor cards stack nicely */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+}
+.card + .card { margin-top: 12px; }
+
+/* Make form grids responsive */
+.form-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+/* Tablet: 2 columns */
+@media (max-width: 900px) {
+  .form-grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Phone: 1 column */
+@media (max-width: 700px) {
+  .form-grid-3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Make all grid children allowed to shrink */
+.form-grid-3 > * {
+  min-width: 0;
+}
+
+/* Inputs never overflow their cells */
+.form-grid-3 input,
+.form-grid-3 select,
+.form-grid-3 textarea {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+
+/* ---------------- Mobile ---------------- */
+@media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: 260px 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  /* Sidebar becomes top bar + collapsible list */
+  .sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    height: auto;
+  }
+
+  .main {
+    padding: 10px;
+  }
+
+  .form-grid-3 { grid-template-columns: 1fr; }
+  .form-grid-2 { grid-template-columns: 1fr; }
+
+  /* Buttons full width on phones */
+  .btn-row {
+    display: grid !important;
+    grid-template-columns: 1fr 44px;
+    gap: 8px;
+  }
+}
+
+/* Small phones */
+@media (max-width: 420px) {
+  .main { padding: 8px; }
+}

@@ -1,0 +1,100 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id            Int       @id @default(autoincrement())
+  name          String
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  isActive      Boolean   @default(true) @map("is_active")
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  createdFeatures FeatureRequest[]   @relation("CreatedBy")
+  updatedFeatures FeatureRequest[]   @relation("UpdatedBy")
+  logs            FeatureDecisionLog[]
+
+  @@map("admins")
+}
+
+model ScoringQuestion {
+  id         Int      @id @default(autoincrement())
+  key        String   @unique           // stable string key, e.g. "time_required"
+  label      String
+  group      String                    // e.g. "Engineering Cost"
+  helpText   String?                   // optional UI hint
+  maxScore   Int      @default(5)       // 5, 10, 20, etc.
+  isNegative Boolean  @default(false)   // true = inverse scoring
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  answers    FeatureScoreAnswer[]
+}
+
+model FeatureRequest {
+  id            Int      @id @default(autoincrement())
+  code          String   @unique
+  title         String?
+  summary       String?
+  module        String?
+  status        String   @default("intake")
+  requestedBy   String?
+  tenant        String?
+  tags          Json?
+  decisionNotes String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // If you already had these relations in your old schema, keep them:
+  createdByAdminId Int?   @map("created_by_admin_id")
+  updatedByAdminId Int?   @map("updated_by_admin_id")
+
+  createdBy Admin? @relation("CreatedBy", fields: [createdByAdminId], references: [id])
+  updatedBy Admin? @relation("UpdatedBy", fields: [updatedByAdminId], references: [id])
+
+  answers   FeatureScoreAnswer[]
+  logs      FeatureDecisionLog[]
+
+  @@map("feature_requests")
+}
+
+model FeatureScoreAnswer {
+  id         Int      @id @default(autoincrement())
+  featureId  Int
+  questionId Int
+  value      Int      // 0..maxScore
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  feature  FeatureRequest  @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  question ScoringQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([featureId, questionId]) // one answer per question per feature
+  @@index([featureId])
+  @@index([questionId])
+  @@map("feature_score_answers")
+}
+
+model FeatureDecisionLog {
+  id               Int      @id @default(autoincrement())
+  featureRequestId Int      @map("feature_request_id")
+  adminId          Int?     @map("admin_id")
+  action           String
+  payload          Json?
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  featureRequest FeatureRequest @relation(fields: [featureRequestId], references: [id], onDelete: Cascade)
+  admin          Admin?         @relation(fields: [adminId], references: [id])
+
+  @@map("feature_decision_logs")
+}
