@@ -4,6 +4,8 @@
   "main": "index.js",
   "type": "commonjs",
   "scripts": {
+    "start": "node src/server.js",
+    "build": "echo 'No build step required'",
     "dev": "node src/server.js",
     "migrate": "prisma migrate deploy",
     "generate": "prisma generate"
