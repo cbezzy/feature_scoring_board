@@ -43,11 +43,10 @@ async function login(req, res) {
     { expiresIn: process.env.JWT_EXPIRES_IN || "7d" }
   );
 
-  const secure = process.env.NODE_ENV === "production";
   res.cookie("pcfb_token", token, {
     httpOnly: true,
-    sameSite: secure ? "strict" : "none",
-    secure,
+    sameSite: "none",
+    secure: process.env.SECURE_COOKIES || true,
     path: "/",
     maxAge: 7 * 24 * 3600 * 1000,
   });
@@ -56,11 +55,10 @@ async function login(req, res) {
 }
 
 function logout(req, res) {
-  const secure = process.env.NODE_ENV === "production";
   res.clearCookie("pcfb_token", {
     httpOnly: true,
-    secure,
-    sameSite: secure ? "strict" : "lax",
+    secure: process.env.SECURE_COOKIES || true,
+    sameSite: "none",
     path: "/",
   });
   res.json({ ok: true });
