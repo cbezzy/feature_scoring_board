@@ -46,7 +46,7 @@ async function login(req, res) {
   const secure = process.env.NODE_ENV === "production";
   res.cookie("pcfb_token", token, {
     httpOnly: true,
-    sameSite: secure ? "strict" : "lax",
+    sameSite: secure ? "strict" : "none",
     secure,
     path: "/",
     maxAge: 7 * 24 * 3600 * 1000,
