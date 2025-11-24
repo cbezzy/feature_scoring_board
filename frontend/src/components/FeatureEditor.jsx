@@ -10,19 +10,41 @@ const PRIORITY_BANDS = {
   low: { label: "Low", color: "#64748b" },
 };
 
-export default function FeatureEditor({ feature, onPatch, onPatchScores, onDelete }) {
+const DEFAULT_MODULES = [
+  { label: "Core ERP", value: "core" },
+  { label: "Production", value: "production" },
+  { label: "Inventory", value: "inventory" },
+  { label: "Accounting", value: "accounting" },
+  { label: "Mobile", value: "mobile" },
+  { label: "AI / Automation", value: "ai" },
+  { label: "Reporting", value: "reporting" },
+  { label: "Integrations", value: "integrations" },
+];
+
+export default function FeatureEditor({ admin, feature, onPatch, onPatchScores, onDelete }) {
   const [draft, setDraft] = useState(feature);
   const [tagInput, setTagInput] = useState("");
   const [questions, setQuestions] = useState([]);
+  const [modules, setModules] = useState([]);
   const [activeTab, setActiveTab] = useState("details"); // "details" | "scoring"
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // local, editable answers map
+  // local, editable answers map for the current admin
   const [localAnswers, setLocalAnswers] = useState({});
 
-  // Load configurable scoring questions
+  const formatScore = (value) => {
+    const num = Number(value ?? 0);
+    return Number.isInteger(num) ? num : num.toFixed(1);
+  };
+
+  // Load configurable scoring questions + module options
   useEffect(() => {
     api.listQuestions().then(setQuestions).catch(console.error);
+    api.listModules()
+      .then(setModules)
+      .catch((err) => {
+        console.error("Failed to load modules", err);
+      });
   }, []);
 
   // Refresh draft + local answers when selection changes
@@ -34,55 +56,29 @@ export default function FeatureEditor({ feature, onPatch, onPatchScores, onDelet
   }, [feature.id]);
 
   useEffect(() => {
-    const m = {};
-    for (const a of feature.answers || []) m[a.questionId] = a.value;
-    setLocalAnswers(m);
-  }, [feature.answers]);
+    const answers = feature.answers || [];
+    const mine = admin?.id
+      ? answers.filter((a) => a.adminId === admin.id)
+      : answers.filter((a) => !a.adminId);
+    const fallback = mine.length ? mine : answers.filter((a) => !a.adminId);
+    const map = {};
+    for (const entry of (mine.length ? mine : fallback)) {
+      map[entry.questionId] = entry.value;
+    }
+    setLocalAnswers(map);
+  }, [feature.answers, admin?.id]);
 
 
-  // Optimistic slider update + backend sync
+  // Admin-specific slider update + backend sync
   async function patchAnswer(questionId, value) {
     const nextAnswers = { ...localAnswers, [questionId]: value };
     setLocalAnswers(nextAnswers);
 
-    // Build answers payload for API
-    const answersPayload = Object.entries(nextAnswers).map(([qid, v]) => ({
-      questionId: Number(qid),
-      value: Number(v),
-    }));
-
-    // ✅ OPTIMISTIC: compute total + priority locally and update sidebar now
-    let optimisticTotal = 0;
-    for (const q of questions) {
-      const v = Number(nextAnswers[q.id] ?? 0);
-      optimisticTotal += q.isNegative ? (q.maxScore - v) : v;
-    }
-
-    const totalPossible = questions.reduce((s, q) => s + (q.maxScore || 0), 0);
-    const highCutoff = totalPossible * 0.75;
-    const medCutoff = totalPossible * 0.55;
-
-    const optimisticPriority =
-      optimisticTotal >= highCutoff ? "high" :
-      optimisticTotal >= medCutoff ? "medium" :
-      "low";
-
-    if (onPatchScores) {
-      onPatchScores({
-        ...feature,
-        answers: (feature.answers || []).map(a =>
-          a.questionId === questionId ? { ...a, value } : a
-        ),
-        total: optimisticTotal,
-        priority: optimisticPriority,
-      });
-    }
-
-    // ✅ Then persist to backend
     try {
-      const updatedFeature = await api.updateAnswers(feature.id, answersPayload);
+      const updatedFeature = await api.updateAnswers(feature.id, [
+        { questionId, value: Number(value) },
+      ]);
 
-      // If backend returns totals, overwrite optimistic values
       if (updatedFeature && onPatchScores) {
         onPatchScores(updatedFeature);
       }
@@ -96,37 +92,46 @@ export default function FeatureEditor({ feature, onPatch, onPatchScores, onDelet
 
   // If backend already returned total/priority, use that.
   // Otherwise compute locally from questions + localAnswers.
-  const computedTotal = useMemo(() => {
-  // If questions not loaded yet, show server total if available
-  if (!questions.length && typeof feature.total === "number") {
-    return feature.total;
-  }
+  const reviewerTotals = feature.scoreTotals || [];
 
-  let t = 0;
-  for (const q of questions) {
-    const v = Number(localAnswers[q.id] ?? 0);
-    t += q.isNegative ? (q.maxScore - v) : v;
-  }
-  return t;
-}, [questions, localAnswers, feature.total]);
+  const savedScoreEntry = useMemo(() => {
+    if (!reviewerTotals.length) return null;
+    if (admin?.id) {
+      return reviewerTotals.find((entry) => entry.adminId === admin.id) || null;
+    }
+    return reviewerTotals.find((entry) => !entry.adminId) || reviewerTotals[0];
+  }, [reviewerTotals, admin?.id]);
 
-  const priority =
-    feature.priority ||
-    (() => {
-      const totalPossible = questions.reduce(
-        (s, q) => s + (q.maxScore || 0),
-        0
-      );
-      const highCutoff = totalPossible * 0.75;
-      const medCutoff = totalPossible * 0.55;
-      return computedTotal >= highCutoff
-        ? "high"
-        : computedTotal >= medCutoff
-        ? "medium"
-        : "low";
-    })();
+  const yourScore = useMemo(() => {
+    if (!questions.length) {
+      return savedScoreEntry?.total ?? 0;
+    }
 
+    let total = 0;
+    let touched = false;
+    for (const q of questions) {
+      if (localAnswers[q.id] == null) continue;
+      const v = Number(localAnswers[q.id]);
+      total += q.isNegative ? (q.maxScore - v) : v;
+      touched = true;
+    }
+
+    if (!touched) return savedScoreEntry?.total ?? 0;
+    return Number(total.toFixed(2));
+  }, [questions, localAnswers, savedScoreEntry]);
+
+  const medianScore = Number(feature.total ?? 0);
+  const priority = feature.priority || "low";
   const band = PRIORITY_BANDS[priority] || PRIORITY_BANDS.low;
+
+  const availableModules = useMemo(() => {
+    if (modules.length) {
+      return modules
+        .filter((m) => m.isActive !== false)
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+    }
+    return DEFAULT_MODULES;
+  }, [modules]);
 
   function updateField(key, val) {
     setDraft((d) => ({ ...d, [key]: val }));
@@ -179,9 +184,29 @@ export default function FeatureEditor({ feature, onPatch, onPatchScores, onDelet
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <div style={{ fontSize: 28, fontWeight: 800 }}>
-              {computedTotal}
+          <div
+            style={{
+              display: "flex",
+              gap: 24,
+              alignItems: "center",
+              flexWrap: "wrap",
+              justifyContent: "flex-end",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "#94a3b8",
+                  textTransform: "uppercase",
+                  letterSpacing: 0.5,
+                }}
+              >
+                Median score
+              </div>
+              <div style={{ fontSize: 28, fontWeight: 800 }}>
+                {formatScore(medianScore)}
+              </div>
             </div>
             <div
               style={{
@@ -191,12 +216,26 @@ export default function FeatureEditor({ feature, onPatch, onPatchScores, onDelet
                 color: "white",
                 fontSize: 12,
                 fontWeight: 700,
+                textTransform: "capitalize",
               }}
             >
               {band.label}
             </div>
-            
-            
+            <div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "#94a3b8",
+                  textTransform: "uppercase",
+                  letterSpacing: 0.5,
+                }}
+              >
+                Your score
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 700 }}>
+                {formatScore(yourScore)}
+              </div>
+            </div>
           </div>
           
         </div>
@@ -269,9 +308,7 @@ export default function FeatureEditor({ feature, onPatch, onPatchScores, onDelet
                 <label style={{ fontSize: 12 }}>Module</label>
                 <select
                   value={draft.module || ""}
-                  onChange={(e) =>
-                    updateField("module", e.target.value)
-                  }
+                  onChange={(e) => updateField("module", e.target.value)}
                   style={{
                     width: "100%",
                     padding: 8,
@@ -280,14 +317,15 @@ export default function FeatureEditor({ feature, onPatch, onPatchScores, onDelet
                   }}
                 >
                   <option value="">Unassigned</option>
-                  <option value="core">Core ERP</option>
-                  <option value="production">Production</option>
-                  <option value="inventory">Inventory</option>
-                  <option value="accounting">Accounting</option>
-                  <option value="mobile">Mobile</option>
-                  <option value="ai">AI / Automation</option>
-                  <option value="reporting">Reporting</option>
-                  <option value="integrations">Integrations</option>
+                  {availableModules.map((mod) => (
+                    <option key={mod.value} value={mod.value}>
+                      {mod.label}
+                    </option>
+                  ))}
+                  {draft.module &&
+                    !availableModules.some((m) => m.value === draft.module) && (
+                      <option value={draft.module}>{draft.module}</option>
+                    )}
                 </select>
               </div>
 
@@ -492,6 +530,67 @@ export default function FeatureEditor({ feature, onPatch, onPatchScores, onDelet
 
         {activeTab === "scoring" && (
           <div style={{ marginTop: 12 }}>
+            <div
+              style={{
+                marginBottom: 12,
+                background: "#f8fafc",
+                borderRadius: 10,
+                padding: 12,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "#94a3b8",
+                  textTransform: "uppercase",
+                  letterSpacing: 0.5,
+                  marginBottom: 6,
+                }}
+              >
+                Reviewer breakdown
+              </div>
+
+              {reviewerTotals.length ? (
+                reviewerTotals.map((entry) => (
+                  <div
+                    key={`${entry.adminId ?? "legacy"}-${
+                      entry.adminEmail || entry.adminName || "anon"
+                    }`}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      padding: "4px 0",
+                      fontWeight: entry.adminId === admin?.id ? 700 : 500,
+                      color:
+                        entry.adminId === admin?.id ? "#0f172a" : "#334155",
+                    }}
+                  >
+                    <span>{entry.adminName || entry.adminEmail || "Unattributed"}</span>
+                    <span>{formatScore(entry.total)}</span>
+                  </div>
+                ))
+              ) : (
+                <div style={{ fontSize: 12, color: "#64748b" }}>
+                  No admin has saved a score yet.
+                </div>
+              )}
+
+              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
+                Median priority uses the midpoint of everyone listed above.
+              </div>
+            </div>
+
+            <div
+              style={{
+                fontSize: 12,
+                color: "#64748b",
+                marginBottom: 12,
+              }}
+            >
+              Your sliders only update <strong>your</strong> answers; the feature rank is the
+              median of every admin's total.
+            </div>
+
             <ScoreTabs
               questions={questions}
               answersMap={localAnswers}

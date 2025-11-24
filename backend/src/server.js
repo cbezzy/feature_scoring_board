@@ -7,6 +7,7 @@ const authRoutes = require("./routes/auth.routes");
 const featureRoutes = require("./routes/features.routes");
 const questionRoutes = require("./routes/questions.routes");
 const adminRoutes = require("./routes/admins.routes");
+const moduleRoutes = require("./routes/modules.routes");
 
 
 const app = express();
@@ -53,6 +54,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/features", featureRoutes);
 app.use("/api/questions", questionRoutes);
 app.use("/api/admins", adminRoutes);
+app.use("/api/modules", moduleRoutes);
 
 
 

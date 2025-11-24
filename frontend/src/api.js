@@ -58,10 +58,18 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ answers }),
     }),
-    listAdmins: () => request("/admins"),
-    createAdmin: (payload) =>
-      request("/admins", { method: "POST", body: JSON.stringify(payload) }),
-    updateAdmin: (id, payload) =>
-      request(`/admins/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
 
+  // ---- Modules ----
+  listModules: () => request("/modules"),
+  createModule: (payload) =>
+    request("/modules", { method: "POST", body: JSON.stringify(payload) }),
+  updateModule: (id, payload) =>
+    request(`/modules/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteModule: (id) =>
+    request(`/modules/${id}`, { method: "DELETE" }),
+  listAdmins: () => request("/admins"),
+  createAdmin: (payload) =>
+    request("/admins", { method: "POST", body: JSON.stringify(payload) }),
+  updateAdmin: (id, payload) =>
+    request(`/admins/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
 };

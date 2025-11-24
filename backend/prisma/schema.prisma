@@ -20,6 +20,7 @@ model Admin {
   createdFeatures FeatureRequest[]   @relation("CreatedBy")
   updatedFeatures FeatureRequest[]   @relation("UpdatedBy")
   logs            FeatureDecisionLog[]
+  scoreAnswers    FeatureScoreAnswer[] @relation("AdminScoreAnswers")
 
   @@map("admins")
 }
@@ -38,6 +39,18 @@ model ScoringQuestion {
   updatedAt  DateTime @updatedAt
 
   answers    FeatureScoreAnswer[]
+}
+
+model FeatureModule {
+  id        Int      @id @default(autoincrement())
+  label     String
+  value     String   @unique
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("feature_modules")
 }
 
 model FeatureRequest {
@@ -72,15 +85,18 @@ model FeatureScoreAnswer {
   featureId  Int
   questionId Int
   value      Int      // 0..maxScore
+  adminId    Int?     @map("admin_id")
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   feature  FeatureRequest  @relation(fields: [featureId], references: [id], onDelete: Cascade)
   question ScoringQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  admin    Admin?          @relation("AdminScoreAnswers", fields: [adminId], references: [id])
 
-  @@unique([featureId, questionId]) // one answer per question per feature
+  @@unique([featureId, questionId, adminId]) // one answer per question per admin
   @@index([featureId])
   @@index([questionId])
+  @@index([adminId])
   @@map("feature_score_answers")
 }
 

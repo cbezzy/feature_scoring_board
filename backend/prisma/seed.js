@@ -33,6 +33,25 @@ async function main() {
     });
   }
 
+  const modules = [
+    { label: "Core ERP", value: "core", sortOrder: 10 },
+    { label: "Production", value: "production", sortOrder: 20 },
+    { label: "Inventory", value: "inventory", sortOrder: 30 },
+    { label: "Accounting", value: "accounting", sortOrder: 40 },
+    { label: "Mobile", value: "mobile", sortOrder: 50 },
+    { label: "AI / Automation", value: "ai", sortOrder: 60 },
+    { label: "Reporting", value: "reporting", sortOrder: 70 },
+    { label: "Integrations", value: "integrations", sortOrder: 80 },
+  ];
+
+  for (const mod of modules) {
+    await prisma.featureModule.upsert({
+      where: { value: mod.value },
+      update: mod,
+      create: mod,
+    });
+  }
+
   const email = "admin@local.test";
 
   // Check if already exists

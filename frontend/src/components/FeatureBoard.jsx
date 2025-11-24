@@ -13,8 +13,7 @@ export default function FeatureBoard({ admin, onLogout }) {
   const [sortField, setSortField] = useState("priority");
   const [sortOrder, setSortOrder] = useState("desc"); 
   const [mainTab, setMainTab] = useState("features"); // features | admins
-  const activeFeature = features.find(f => f.id === activeId) || null;
-
+  const activeFeature = features.find((f) => f.id === activeId) || null;
 
   async function load() {
     const list = await api.listFeatures();
@@ -78,9 +77,15 @@ export default function FeatureBoard({ admin, onLogout }) {
     return list;
   }, [features, search, sortField, sortOrder]);
 
+  const todoFeatures = useMemo(() => {
+    if (!admin?.id) return [];
+    return features.filter((f) => {
+      const totals = Array.isArray(f.scoreTotals) ? f.scoreTotals : [];
+      return !totals.some((entry) => entry.adminId === admin.id);
+    });
+  }, [features, admin?.id]);
 
 
-  const active = features.find(f => f.id === activeId) || null;
 
   async function createNew() {
     const fr = await api.createFeature({});
@@ -93,26 +98,14 @@ export default function FeatureBoard({ admin, onLogout }) {
     await load();
   }
 
-  async function patchScores(id, payload) {
-    await api.updateScores(id, payload);
-    await load();
-  }
-
   async function removeFeature(id) {
     await api.deleteFeature(id);
     await load();
   }
 
   function replaceFeatureInList(updated) {
-    setFeatures(prev =>
-      prev.map(f => (f.id === updated.id ? { ...f, ...updated } : f))
-    );
-  }
-
-
-  function replaceFeatureInList(updated) {
-    setFeatures(prev =>
-      prev.map(f => (f.id === updated.id ? { ...f, ...updated } : f))
+    setFeatures((prev) =>
+      prev.map((f) => (f.id === updated.id ? { ...f, ...updated } : f))
     );
   }
 
@@ -138,20 +131,56 @@ export default function FeatureBoard({ admin, onLogout }) {
 
 
       <div className="main">
-          {mainTab === "admins" ? (
-            <AdminsPanel />
-          ) : activeFeature ? (
-            <FeatureEditor
-              feature={activeFeature}
-              onPatch={(payload) => patchFeature(activeFeature.id, payload)}
-              onPatchScores={replaceFeatureInList}
-              onDelete={() => deleteFeature(activeFeature.id)}
-            />
-          ) : (
-            <div style={{ padding: 16, color: "#64748b" }}>
-              Select a feature to edit
-            </div>
-          )}
+        {mainTab === "admins" ? (
+          <AdminsPanel />
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {todoFeatures.length > 0 && (
+              <div className="card">
+                <div style={{ fontWeight: 700, marginBottom: 8 }}>
+                  Your scoring todo ({todoFeatures.length})
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {todoFeatures.map((todo) => (
+                    <button
+                      key={todo.id}
+                      onClick={() => {
+                        setActiveId(todo.id);
+                      }}
+                      style={{
+                        textAlign: "left",
+                        padding: "6px 10px",
+                        borderRadius: 8,
+                        border: "1px solid #e2e8f0",
+                        background: todo.id === activeId ? "#eef2ff" : "white",
+                        cursor: "pointer",
+                      }}
+                    >
+                      <div style={{ fontWeight: 600 }}>{todo.title || todo.code}</div>
+                      <div style={{ fontSize: 12, color: "#64748b" }}>
+                        {todo.summary || "No summary yet"}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {activeFeature ? (
+              <FeatureEditor
+                admin={admin}
+                feature={activeFeature}
+                onPatch={(payload) => patchFeature(activeFeature.id, payload)}
+                onPatchScores={replaceFeatureInList}
+                onDelete={() => removeFeature(activeFeature.id)}
+              />
+            ) : (
+              <div style={{ padding: 16, color: "#64748b" }}>
+                Select a feature to edit
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

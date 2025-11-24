@@ -18,6 +18,11 @@ export default function FeatureList({
   onCreate,
   onLogout,
 }) {
+  const formatScore = (value) => {
+    const num = Number(value ?? 0);
+    return Number.isInteger(num) ? num : num.toFixed(1);
+  };
+
   return (
     <div
       className={`sidebar ${className}`}
@@ -198,9 +203,9 @@ export default function FeatureList({
                       minWidth: 30,
                       textAlign: "center",
                     }}
-                    title={`Score: ${f.total ?? 0}`}
+                    title={`Median score: ${formatScore(f.total)}`}
                   >
-                    {f.total ?? 0}
+                    {formatScore(f.total)}
                   </div>
                 </div>
 

@@ -25,6 +25,7 @@ This project is ideal for teams needing a simple internal tool to prioritize fea
   - Decision notes
 - Two-pane layout for list + editor
 - Search and sort features
+- Module dropdown is managed via the Admin > Module Library so teams can curate product areas without code changes.
 
 ### ✔ Configurable Scoring System
 - Add your own scoring questions from the database:
@@ -32,6 +33,7 @@ This project is ideal for teams needing a simple internal tool to prioritize fea
   - Group (e.g., Engineering, Customer Impact)
   - Max score (5/10/20/etc.)
   - Negative indicators (reversed scoring)
+- Each admin records their own answers; the feature’s total score is the **median** of every admin’s total to curb outliers.
 - Sliders auto-calculate:
   - Total score
   - Priority band (High / Medium / Low)
@@ -41,6 +43,7 @@ This project is ideal for teams needing a simple internal tool to prioritize fea
 - Admin login (email + password)
 - JWT (HttpOnly cookie) session auth
 - Add / disable admin accounts
+- Manage the Module Library (add/disable/remove module options for the feature form)
 - Admin panel in the UI
 
 ### ✔ Modern Interface
@@ -167,6 +170,12 @@ feature-board/
 - `POST   /api/admins`
 - `PUT    /api/admins/:id`
 - `DELETE /api/admins/:id`
+
+### Modules
+- `GET    /api/modules`
+- `POST   /api/modules`
+- `PUT    /api/modules/:id`
+- `DELETE /api/modules/:id`
 
 ## 🛠 Technologies
 
