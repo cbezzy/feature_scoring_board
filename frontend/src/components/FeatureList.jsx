@@ -175,6 +175,7 @@ export default function FeatureList({
                     display: "flex",
                     justifyContent: "space-between",
                     gap: 8,
+                    alignItems: "flex-start",
                   }}
                 >
                   <div
@@ -183,6 +184,7 @@ export default function FeatureList({
                       whiteSpace: "nowrap",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
+                      flex: 1,
                     }}
                   >
                     {f.title || f.code}
@@ -190,22 +192,42 @@ export default function FeatureList({
 
                   <div
                     style={{
-                      fontSize: 12,
-                      color: "white",
-                      padding: "2px 6px",
-                      borderRadius: 6,
-                      background:
-                        f.priority === "high"
-                          ? "#059669"
-                          : f.priority === "medium"
-                          ? "#d97706"
-                          : "#64748b",
-                      minWidth: 30,
-                      textAlign: "center",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-end",
+                      gap: 4,
                     }}
-                    title={`Median score: ${formatScore(f.total)}`}
                   >
-                    {formatScore(f.total)}
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: "white",
+                        padding: "2px 6px",
+                        borderRadius: 6,
+                        background:
+                          f.priority === "high"
+                            ? "#059669"
+                            : f.priority === "medium"
+                            ? "#d97706"
+                            : "#64748b",
+                        minWidth: 30,
+                        textAlign: "center",
+                      }}
+                      title={`Median score: ${formatScore(f.total)}`}
+                    >
+                      {formatScore(f.total)}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "#94a3b8",
+                        textAlign: "right",
+                      }}
+                    >
+                      {(f.scoreTotals?.length || 0) > 0
+                        ? `${f.scoreTotals.length} ${f.scoreTotals.length === 1 ? "reviewer" : "reviewers"}`
+                        : "No scores"}
+                    </div>
                   </div>
                 </div>
 
