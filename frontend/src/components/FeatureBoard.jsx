@@ -3,6 +3,7 @@ import { api } from "../api";
 import FeatureList from "./FeatureList";
 import FeatureEditor from "./FeatureEditor";
 import AdminsPanel from "./AdminsPanel";
+import Dashboard from "./Dashboard";
 
 
 
@@ -12,7 +13,7 @@ export default function FeatureBoard({ admin, onLogout }) {
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState("priority");
   const [sortOrder, setSortOrder] = useState("desc"); 
-  const [mainTab, setMainTab] = useState("features"); // features | admins
+  const [mainTab, setMainTab] = useState("dashboard"); // dashboard | features | admins
   const activeFeature = features.find((f) => f.id === activeId) || null;
 
   async function load() {
@@ -124,48 +125,25 @@ export default function FeatureBoard({ admin, onLogout }) {
         onSortOrder={setSortOrder}
         features={filteredAndSorted}
         activeId={activeId}
-        onSelect={setActiveId}
+        onSelect={(id) => {
+          if (mainTab !== "features") {
+            setMainTab("features");
+          }
+          setActiveId(id);
+        }}
         onCreate={createNew}
         onLogout={onLogout}
+        todoFeatures={todoFeatures}
       />
 
 
       <div className="main">
-        {mainTab === "admins" ? (
+        {mainTab === "dashboard" ? (
+          <Dashboard features={features} />
+        ) : mainTab === "admins" ? (
           <AdminsPanel />
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {todoFeatures.length > 0 && (
-              <div className="card">
-                <div style={{ fontWeight: 700, marginBottom: 8 }}>
-                  Your scoring todo ({todoFeatures.length})
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {todoFeatures.map((todo) => (
-                    <button
-                      key={todo.id}
-                      onClick={() => {
-                        setActiveId(todo.id);
-                      }}
-                      style={{
-                        textAlign: "left",
-                        padding: "6px 10px",
-                        borderRadius: 8,
-                        border: "1px solid #e2e8f0",
-                        background: todo.id === activeId ? "#eef2ff" : "white",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <div style={{ fontWeight: 600 }}>{todo.title || todo.code}</div>
-                      <div style={{ fontSize: 12, color: "#64748b" }}>
-                        {todo.summary || "No summary yet"}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {activeFeature ? (
               <FeatureEditor
                 admin={admin}

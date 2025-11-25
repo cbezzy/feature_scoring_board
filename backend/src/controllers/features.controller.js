@@ -23,9 +23,19 @@ function withScoreSummary(feature, cutoffs) {
   if (!feature) return feature;
 
   const totalsMap = new Map();
+  let lastReviewedAt = null;
+  
   for (const answer of feature.answers || []) {
     const q = answer.question;
     if (!q) continue;
+
+    // Track most recent answer update for "last reviewed"
+    if (answer.updatedAt) {
+      const answerDate = new Date(answer.updatedAt);
+      if (!lastReviewedAt || answerDate > new Date(lastReviewedAt)) {
+        lastReviewedAt = answer.updatedAt;
+      }
+    }
 
     const normalized = q.isNegative
       ? (q.maxScore - Number(answer.value || 0))
@@ -65,6 +75,7 @@ function withScoreSummary(feature, cutoffs) {
     scoreTotals,
     total: Number.isFinite(aggregated) ? aggregated : 0,
     priority,
+    lastReviewedAt,
   };
 }
 
@@ -87,6 +98,8 @@ async function listFeatures(req, res) {
 
     const features = await prisma.featureRequest.findMany({
       include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        updatedBy: { select: { id: true, name: true, email: true } },
         answers: {
           include: {
             question: true,
@@ -110,6 +123,8 @@ async function getFeature(req, res) {
   const feature = await prisma.featureRequest.findUnique({
     where: { id },
     include: {
+      createdBy: { select: { id: true, name: true, email: true } },
+      updatedBy: { select: { id: true, name: true, email: true } },
       answers: {
         include: {
           question: true,
@@ -129,6 +144,7 @@ async function getFeature(req, res) {
 async function createFeature(req, res) {
   try {
     const data = req.body || {};
+    const adminId = req.admin?.id;
 
     const code = data.code || `FR-${Date.now().toString(36).toUpperCase()}`;
 
@@ -143,6 +159,8 @@ async function createFeature(req, res) {
         tenant: data.tenant || "",
         tags: data.tags || [],
         decisionNotes: data.decisionNotes || "",
+        createdByAdminId: adminId || null,
+        updatedByAdminId: adminId || null,
       },
     });
 
@@ -150,6 +168,8 @@ async function createFeature(req, res) {
     const fresh = await prisma.featureRequest.findUnique({
       where: { id: feature.id },
       include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        updatedBy: { select: { id: true, name: true, email: true } },
         answers: {
           include: {
             question: true,
@@ -170,6 +190,7 @@ async function updateFeature(req, res) {
   try {
     const id = Number(req.params.id);
     const data = req.body || {};
+    const adminId = req.admin?.id;
 
     const feature = await prisma.featureRequest.update({
       where: { id },
@@ -182,9 +203,11 @@ async function updateFeature(req, res) {
         tenant: data.tenant ?? undefined,
         tags: data.tags ?? undefined,
         decisionNotes: data.decisionNotes ?? undefined,
-        // IMPORTANT: remove updatedByAdminId unless you added it to schema
+        updatedByAdminId: adminId || undefined,
       },
       include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        updatedBy: { select: { id: true, name: true, email: true } },
         answers: {
           include: {
             question: true,
@@ -251,6 +274,8 @@ async function updateAnswers(req, res) {
     const feature = await prisma.featureRequest.findUnique({
       where: { id: featureId },
       include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+        updatedBy: { select: { id: true, name: true, email: true } },
         answers: {
           include: {
             question: true,

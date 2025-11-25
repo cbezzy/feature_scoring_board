@@ -37,6 +37,22 @@ export default function FeatureEditor({ admin, feature, onPatch, onPatchScores, 
     return Number.isInteger(num) ? num : num.toFixed(1);
   };
 
+  const formatDate = (dateString) => {
+    if (!dateString) return "N/A";
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return "N/A";
+    }
+  };
+
   // Load configurable scoring questions + module options
   useEffect(() => {
     api.listQuestions().then(setQuestions).catch(console.error);
@@ -237,7 +253,51 @@ export default function FeatureEditor({ admin, feature, onPatch, onPatchScores, 
               </div>
             </div>
           </div>
-          
+        </div>
+
+        {/* Metadata */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: 12,
+            marginTop: 12,
+            padding: "12px 0",
+            borderBottom: "1px solid #e2e8f0",
+            fontSize: 12,
+            color: "#64748b",
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
+              Created by
+            </div>
+            <div style={{ fontWeight: 600, color: "#334155" }}>
+              {feature.createdBy?.name || "Unknown"}
+            </div>
+            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+              {formatDate(feature.createdAt)}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
+              Last updated by
+            </div>
+            <div style={{ fontWeight: 600, color: "#334155" }}>
+              {feature.updatedBy?.name || "Unknown"}
+            </div>
+            <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+              {formatDate(feature.updatedAt)}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>
+              Last reviewed
+            </div>
+            <div style={{ fontWeight: 600, color: "#334155" }}>
+              {feature.lastReviewedAt ? formatDate(feature.lastReviewedAt) : "Never"}
+            </div>
+          </div>
         </div>
 
         {/* Tabs */}

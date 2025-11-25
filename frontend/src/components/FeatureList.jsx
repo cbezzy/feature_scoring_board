@@ -4,7 +4,7 @@ import { Plus, Search, LogOut } from "lucide-react";
 export default function FeatureList({
   className = "",
   admin,
-  mainTab,                // "features" | "admins"
+  mainTab,                // "dashboard" | "features" | "admins"
   onChangeMainTab,        // setter from FeatureBoard
   search,
   onSearch,
@@ -17,6 +17,7 @@ export default function FeatureList({
   onSelect,
   onCreate,
   onLogout,
+  todoFeatures = [],
 }) {
   const formatScore = (value) => {
     const num = Number(value ?? 0);
@@ -37,7 +38,11 @@ export default function FeatureList({
       {/* TOP (fixed) */}
       <div style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
         <div style={{ fontWeight: 600 }}>
-          {mainTab === "admins" ? "Admins" : "Feature Requests"}
+          {mainTab === "dashboard"
+            ? "Dashboard"
+            : mainTab === "admins"
+            ? "Admins"
+            : "Feature Requests"}
         </div>
         <div style={{ fontSize: 12, color: "#64748b" }}>
           Signed in as {admin?.name}
@@ -47,11 +52,11 @@ export default function FeatureList({
         {/* Search + Sort only on features tab */}
         {mainTab === "features" && (
           <>
-          <div style={{ marginTop: 12, position: "relative" }}>
-            <button
+            <div style={{ marginTop: 12, position: "relative" }}>
+              <button
                 onClick={onCreate}
                 style={{
-                  width:"100%",
+                  width: "100%",
                   flex: 1,
                   padding: 8,
                   borderRadius: 8,
@@ -155,7 +160,47 @@ export default function FeatureList({
 
       {/* MIDDLE (scrolls) */}
       <div style={{ overflow: "auto", flex: 1 }}>
-        {mainTab === "features" ? (
+        {mainTab === "dashboard" ? (
+          <>
+            {todoFeatures.length > 0 ? (
+              <>
+                <div style={{ padding: 12, borderBottom: "1px solid #e2e8f0" }}>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>
+                    Your Scoring Todo ({todoFeatures.length})
+                  </div>
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
+                    Click a feature to score it
+                  </div>
+                </div>
+                {todoFeatures.map((todo) => (
+                  <button
+                    key={todo.id}
+                    onClick={() => onSelect(todo.id)}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      padding: 12,
+                      borderBottom: "1px solid #f1f5f9",
+                      background: todo.id === activeId ? "#eef2ff" : "white",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <div style={{ fontWeight: 600, marginBottom: 4 }}>
+                      {todo.title || todo.code}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>
+                      {todo.summary || "No summary yet"}
+                    </div>
+                  </button>
+                ))}
+              </>
+            ) : (
+              <div style={{ padding: 16, fontSize: 12, color: "#64748b" }}>
+                All features have been scored! 🎉
+              </div>
+            )}
+          </>
+        ) : mainTab === "features" ? (
           <>
             {features.map((f) => (
               <button
@@ -283,9 +328,40 @@ export default function FeatureList({
         }}
       >
         <div style={{ display: "flex", gap: 8 }}>
-          {/* Left button changes based on tab */}
-          {mainTab === "features" ? (
-            <button
+          {/* Navigation buttons */}
+          <button
+            onClick={() => onChangeMainTab("dashboard")}
+            style={{
+              flex: 1,
+              padding: "6px 8px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              background: mainTab === "dashboard" ? "#0f172a" : "white",
+              color: mainTab === "dashboard" ? "white" : "#0f172a",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            Dashboard
+          </button>
+          <button
+            onClick={() => onChangeMainTab("features")}
+            style={{
+              flex: 1,
+              padding: "6px 8px",
+              borderRadius: 8,
+              border: "1px solid #cbd5e1",
+              background: mainTab === "features" ? "#0f172a" : "white",
+              color: mainTab === "features" ? "white" : "#0f172a",
+              cursor: "pointer",
+              fontSize: 12,
+              fontWeight: 600,
+            }}
+          >
+            Features
+          </button>
+          <button
             onClick={() => onChangeMainTab("admins")}
             style={{
               flex: 1,
@@ -301,24 +377,6 @@ export default function FeatureList({
           >
             Admins
           </button>
-          ) : (
-            <button
-              onClick={() => onChangeMainTab("features")}
-              style={{
-                flex: 1,
-                padding: 8,
-                borderRadius: 8,
-                border: "none",
-                background: "#0f172a",
-                color: "white",
-                cursor: "pointer",
-                fontSize: 12,
-                fontWeight: 600,
-              }}
-            >
-              Back to Features
-            </button>
-          )}
 
           {/* Logout always visible */}
           <button
