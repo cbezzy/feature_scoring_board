@@ -28,6 +28,7 @@ export default function FeatureEditor({ admin, feature, onPatch, onPatchScores, 
   const [modules, setModules] = useState([]);
   const [activeTab, setActiveTab] = useState("details"); // "details" | "scoring"
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [validationErrors, setValidationErrors] = useState({});
 
   // local, editable answers map for the current admin
   const [localAnswers, setLocalAnswers] = useState({});
@@ -69,7 +70,15 @@ export default function FeatureEditor({ admin, feature, onPatch, onPatchScores, 
     setTagInput("");
     setActiveTab("details");   // only when id changes
     setConfirmDelete(false);
+    setValidationErrors({});
   }, [feature.id]);
+
+  // Check if scoring tab should be visible (both pros and cons have at least 20 chars)
+  const canShowScoringTab = useMemo(() => {
+    const pros = (draft.pros || "").trim();
+    const cons = (draft.cons || "").trim();
+    return pros.length >= 20 && cons.length >= 20;
+  }, [draft.pros, draft.cons]);
 
   useEffect(() => {
     const answers = feature.answers || [];
@@ -153,10 +162,12 @@ export default function FeatureEditor({ admin, feature, onPatch, onPatchScores, 
     setDraft((d) => ({ ...d, [key]: val }));
   }
 
-  async function saveMeta() {
+  async function saveDetails() {
     const payload = {
       title: draft.title,
       summary: draft.summary,
+      pros: draft.pros,
+      cons: draft.cons,
       module: draft.module,
       status: draft.status,
       requestedBy: draft.requestedBy,
@@ -165,6 +176,32 @@ export default function FeatureEditor({ admin, feature, onPatch, onPatchScores, 
       decisionNotes: draft.decisionNotes,
     };
     await onPatch(payload);
+  }
+
+  async function saveMeta(goToScoring = false) {
+    const errors = {};
+    const pros = (draft.pros || "").trim();
+    const cons = (draft.cons || "").trim();
+
+    if (pros.length < 20) {
+      errors.pros = "Pros must be at least 20 characters";
+    }
+    if (cons.length < 20) {
+      errors.cons = "Cons must be at least 20 characters";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      return;
+    }
+
+    setValidationErrors({});
+
+    await saveDetails();
+
+    if (goToScoring && canShowScoringTab) {
+      setActiveTab("scoring");
+    }
   }
 
   function addTag() {
@@ -326,22 +363,24 @@ export default function FeatureEditor({ admin, feature, onPatch, onPatchScores, 
             Details
           </button>
 
-          <button
-            onClick={() => setActiveTab("scoring")}
-            style={{
-              padding: "8px 10px",
-              border: "none",
-              background: "transparent",
-              cursor: "pointer",
-              fontWeight: activeTab === "scoring" ? 700 : 500,
-              borderBottom:
-                activeTab === "scoring"
-                  ? "2px solid #0f172a"
-                  : "2px solid transparent",
-            }}
-          >
-            Scoring
-          </button>
+          {canShowScoringTab && (
+            <button
+              onClick={() => setActiveTab("scoring")}
+              style={{
+                padding: "8px 10px",
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                fontWeight: activeTab === "scoring" ? 700 : 500,
+                borderBottom:
+                  activeTab === "scoring"
+                    ? "2px solid #0f172a"
+                    : "2px solid transparent",
+              }}
+            >
+              Scoring
+            </button>
+          )}
         </div>
 
         {/* Tab content */}
@@ -522,6 +561,68 @@ export default function FeatureEditor({ admin, feature, onPatch, onPatchScores, 
                 />
               </div>
 
+              <div style={{ marginTop: 8, gridColumn: "1 / -1" }}>
+                <label style={{ fontSize: 12 }}>
+                  Make the case for doing this (Pros) *
+                </label>
+                <textarea
+                  value={draft.pros || ""}
+                  onChange={(e) => {
+                    updateField("pros", e.target.value);
+                    if (validationErrors.pros) {
+                      setValidationErrors((prev) => ({ ...prev, pros: undefined }));
+                    }
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: 8,
+                    borderRadius: 8,
+                    border: validationErrors.pros ? "1px solid #dc2626" : "1px solid #cbd5e1",
+                    minHeight: 100,
+                  }}
+                  placeholder="Minimum 20 characters required"
+                />
+                {validationErrors.pros && (
+                  <div style={{ fontSize: 11, color: "#dc2626", marginTop: 4 }}>
+                    {validationErrors.pros}
+                  </div>
+                )}
+                <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
+                  {(draft.pros || "").length} / 20 characters minimum
+                </div>
+              </div>
+
+              <div style={{ marginTop: 8, gridColumn: "1 / -1" }}>
+                <label style={{ fontSize: 12 }}>
+                  Make the case for not doing this (Cons) *
+                </label>
+                <textarea
+                  value={draft.cons || ""}
+                  onChange={(e) => {
+                    updateField("cons", e.target.value);
+                    if (validationErrors.cons) {
+                      setValidationErrors((prev) => ({ ...prev, cons: undefined }));
+                    }
+                  }}
+                  style={{
+                    width: "100%",
+                    padding: 8,
+                    borderRadius: 8,
+                    border: validationErrors.cons ? "1px solid #dc2626" : "1px solid #cbd5e1",
+                    minHeight: 100,
+                  }}
+                  placeholder="Minimum 20 characters required"
+                />
+                {validationErrors.cons && (
+                  <div style={{ fontSize: 11, color: "#dc2626", marginTop: 4 }}>
+                    {validationErrors.cons}
+                  </div>
+                )}
+                <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
+                  {(draft.cons || "").length} / 20 characters minimum
+                </div>
+              </div>
+
               <div style={{ marginTop: 8 , gridColumn: "1 / -1" }} >
                 <label style={{ fontSize: 12 }}>
                   Decision Notes
@@ -565,21 +666,38 @@ export default function FeatureEditor({ admin, feature, onPatch, onPatchScores, 
                   Delete
                 </button>
 
-                {/* Right: Save */}
-                <button
-                  onClick={saveMeta}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: "#0f172a",
-                    color: "white",
-                    cursor: "pointer",
-                    fontSize: 12,
-                  }}
-                >
-                  Save Details
-                </button>
+                {/* Right: Next or Save */}
+                {canShowScoringTab ? (
+                  <button
+                    onClick={() => saveMeta(true)}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: "#0f172a",
+                      color: "white",
+                      cursor: "pointer",
+                      fontSize: 12,
+                    }}
+                  >
+                    Next
+                  </button>
+                ) : (
+                  <button
+                    onClick={saveDetails}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: "#0f172a",
+                      color: "white",
+                      cursor: "pointer",
+                      fontSize: 12,
+                    }}
+                  >
+                    Save
+                  </button>
+                )}
               </div>
 
 

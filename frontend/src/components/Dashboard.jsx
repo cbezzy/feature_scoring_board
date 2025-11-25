@@ -51,17 +51,24 @@ export default function Dashboard({ features = [] }) {
     };
   }, [features]);
 
-  const statusData = useMemo(() => {
-    const statusCounts = {};
+  const modulePieData = useMemo(() => {
+    const moduleCounts = {};
     features.forEach((f) => {
-      const status = f.status || "intake";
-      statusCounts[status] = (statusCounts[status] || 0) + 1;
+      const module = f.module || "Unassigned";
+      moduleCounts[module] = (moduleCounts[module] || 0) + 1;
     });
 
-    return Object.entries(statusCounts).map(([status, count]) => ({
-      name: status.charAt(0).toUpperCase() + status.slice(1),
+    // Generate colors for modules
+    const colorPalette = [
+      "#3b82f6", "#8b5cf6", "#f59e0b", "#059669", "#dc2626",
+      "#ec4899", "#06b6d4", "#84cc16", "#f97316", "#6366f1",
+      "#14b8a6", "#a855f7", "#eab308", "#ef4444", "#64748b"
+    ];
+
+    return Object.entries(moduleCounts).map(([module, count], index) => ({
+      name: module,
       value: count,
-      color: COLORS.status[status] || "#94a3b8",
+      color: colorPalette[index % colorPalette.length],
     }));
   }, [features]);
 
@@ -215,13 +222,13 @@ export default function Dashboard({ features = [] }) {
           gap: 16,
         }}
       >
-        {/* Features by Status */}
+        {/* Features by Module */}
         <div className="card">
-          <div style={{ fontWeight: 700, marginBottom: 16 }}>Features by Status</div>
+          <div style={{ fontWeight: 700, marginBottom: 16 }}>Features by Module</div>
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>
               <Pie
-                data={statusData}
+                data={modulePieData}
                 cx="50%"
                 cy="50%"
                 labelLine={false}
@@ -230,7 +237,7 @@ export default function Dashboard({ features = [] }) {
                 fill="#8884d8"
                 dataKey="value"
               >
-                {statusData.map((entry, index) => (
+                {modulePieData.map((entry, index) => (
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>

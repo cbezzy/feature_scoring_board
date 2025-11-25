@@ -8,6 +8,10 @@ export default function FeatureList({
   onChangeMainTab,        // setter from FeatureBoard
   search,
   onSearch,
+  moduleFilter,
+  onModuleFilter,
+  modules = [],
+  moduleCounts = {},
   sortField,
   onSortField,
   sortOrder,
@@ -102,6 +106,38 @@ export default function FeatureList({
                   boxSizing: "border-box",
                 }}
               />
+            </div>
+
+            <div style={{ marginTop: 10 }}>
+              <label style={{ fontSize: 11, color: "#64748b" }}>Filter by Module</label>
+              <select
+                value={moduleFilter}
+                onChange={(e) => onModuleFilter(e.target.value)}
+                style={{
+                  width: "100%",
+                  padding: "7px 8px",
+                  borderRadius: 8,
+                  border: "1px solid #cbd5e1",
+                  fontSize: 13,
+                  background: "white",
+                  marginTop: 4,
+                }}
+              >
+                <option value="">
+                  All Modules ({Object.values(moduleCounts).reduce((sum, count) => sum + count, 0)})
+                </option>
+                <option value="unassigned">
+                  Unassigned ({moduleCounts["unassigned"] || 0})
+                </option>
+                {modules
+                  .filter((m) => m.isActive !== false)
+                  .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
+                  .map((m) => (
+                    <option key={m.id} value={m.value}>
+                      {m.label} ({moduleCounts[m.value] || 0})
+                    </option>
+                  ))}
+              </select>
             </div>
 
             <div style={{ marginTop: 10 }}>

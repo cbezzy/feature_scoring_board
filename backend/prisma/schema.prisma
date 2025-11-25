@@ -58,6 +58,8 @@ model FeatureRequest {
   code          String   @unique
   title         String?
   summary       String?
+  pros          String?  // Make the case for doing this
+  cons          String?  // Make the case for not doing this
   module        String?
   status        String   @default("intake")
   requestedBy   String?

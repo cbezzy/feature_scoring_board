@@ -11,9 +11,11 @@ export default function FeatureBoard({ admin, onLogout }) {
   const [features, setFeatures] = useState([]);
   const [activeId, setActiveId] = useState(null);
   const [search, setSearch] = useState("");
+  const [moduleFilter, setModuleFilter] = useState("");
   const [sortField, setSortField] = useState("priority");
   const [sortOrder, setSortOrder] = useState("desc"); 
   const [mainTab, setMainTab] = useState("dashboard"); // dashboard | features | admins
+  const [modules, setModules] = useState([]);
   const activeFeature = features.find((f) => f.id === activeId) || null;
 
   async function load() {
@@ -22,7 +24,19 @@ export default function FeatureBoard({ admin, onLogout }) {
     setActiveId(list[0]?.id ?? null);
   }
 
-  useEffect(() => { load(); }, []);
+  async function loadModules() {
+    try {
+      const list = await api.listModules();
+      setModules(list);
+    } catch (err) {
+      console.error("Failed to load modules", err);
+    }
+  }
+
+  useEffect(() => { 
+    load(); 
+    loadModules();
+  }, []);
 
   const filteredAndSorted = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -34,6 +48,16 @@ export default function FeatureBoard({ admin, onLogout }) {
             .filter(Boolean)
             .some(x => String(x).toLowerCase().includes(s))
         );
+
+    // Filter by module
+    if (moduleFilter) {
+      list = list.filter(f => {
+        if (moduleFilter === "unassigned") {
+          return !f.module || f.module === "";
+        }
+        return f.module === moduleFilter;
+      });
+    }
 
     const direction = sortOrder === "asc" ? 1 : -1;
 
@@ -76,7 +100,7 @@ export default function FeatureBoard({ admin, onLogout }) {
     }
 
     return list;
-  }, [features, search, sortField, sortOrder]);
+  }, [features, search, moduleFilter, sortField, sortOrder]);
 
   const todoFeatures = useMemo(() => {
     if (!admin?.id) return [];
@@ -85,6 +109,16 @@ export default function FeatureBoard({ admin, onLogout }) {
       return !totals.some((entry) => entry.adminId === admin.id);
     });
   }, [features, admin?.id]);
+
+  // Calculate feature counts per module
+  const moduleCounts = useMemo(() => {
+    const counts = {};
+    features.forEach((f) => {
+      const module = f.module || "unassigned";
+      counts[module] = (counts[module] || 0) + 1;
+    });
+    return counts;
+  }, [features]);
 
 
 
@@ -119,6 +153,10 @@ export default function FeatureBoard({ admin, onLogout }) {
         onChangeMainTab={setMainTab}
         search={search}
         onSearch={setSearch}
+        moduleFilter={moduleFilter}
+        onModuleFilter={setModuleFilter}
+        modules={modules}
+        moduleCounts={moduleCounts}
         sortField={sortField}
         onSortField={setSortField}
         sortOrder={sortOrder}

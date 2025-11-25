@@ -153,6 +153,8 @@ async function createFeature(req, res) {
         code,
         title: data.title || "New feature request",
         summary: data.summary || "",
+        pros: data.pros || "",
+        cons: data.cons || "",
         module: data.module || "",
         status: data.status || "intake",
         requestedBy: data.requestedBy || "",
@@ -197,6 +199,8 @@ async function updateFeature(req, res) {
       data: {
         title: data.title ?? undefined,
         summary: data.summary ?? undefined,
+        pros: data.pros ?? undefined,
+        cons: data.cons ?? undefined,
         module: data.module ?? undefined,
         status: data.status ?? undefined,
         requestedBy: data.requestedBy ?? undefined,
