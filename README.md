@@ -130,6 +130,15 @@ feature-board/
 
    API runs at: [http://localhost:8080](http://localhost:8080)
 
+7. **Daily scoring reminder (optional)**  
+   Admins with at least one feature they have never started scoring (same list as **Your Scoring Todo** in the sidebar) can get a daily digest via Mailgun.
+
+   - **Manual / local:** from `backend`, with `MAILGUN_*` and `APP_PUBLIC_URL` set in `.env`, run:
+     ```bash
+     npm run send-daily-scoring-reminders
+     ```
+   - **DigitalOcean App Platform:** add a **scheduled Job** (same component image and env as the API) that runs that command once per day. Job schedules are typically in **UTC**—pick the cron time that matches “9am” in your timezone (and adjust when DST changes if needed).
+
 ## 💻 Frontend Setup
 
 1. **Install Dependencies**
