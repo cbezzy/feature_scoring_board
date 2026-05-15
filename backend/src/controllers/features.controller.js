@@ -345,12 +345,44 @@ async function updateAnswers(req, res) {
     }
 
     const answers = Array.isArray(req.body.answers) ? req.body.answers : [];
-    const normalized = answers
+    const rows = answers
       .map((a) => ({
         questionId: Number(a.questionId),
-        value: Math.max(0, Number(a.value) || 0),
+        raw: a.value,
       }))
-      .filter((a) => Number.isInteger(a.questionId));
+      .filter((a) => Number.isInteger(a.questionId) && a.questionId > 0);
+
+    let normalized = [];
+    if (rows.length) {
+      const ids = [...new Set(rows.map((r) => r.questionId))];
+      const questions = await prisma.scoringQuestion.findMany({
+        where: { id: { in: ids }, isActive: true },
+        select: { id: true, maxScore: true },
+      });
+      const maxById = new Map(questions.map((q) => [q.id, q.maxScore ?? 0]));
+
+      for (const r of rows) {
+        const maxScore = maxById.get(r.questionId);
+        if (maxScore === undefined) {
+          return res.status(400).json({
+            error: `Unknown or inactive scoring question: ${r.questionId}`,
+          });
+        }
+        const { raw } = r;
+        if (raw === null || raw === undefined || raw === "") {
+          return res.status(400).json({
+            error: `Missing score value for question ${r.questionId}`,
+          });
+        }
+        const num = Number(raw);
+        if (!Number.isInteger(num) || num < 0 || num > maxScore) {
+          return res.status(400).json({
+            error: `Score for question ${r.questionId} must be an integer from 0 to ${maxScore}`,
+          });
+        }
+        normalized.push({ questionId: r.questionId, value: num });
+      }
+    }
 
     let wasComplete = false;
     if (normalized.length) {

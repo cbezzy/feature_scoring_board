@@ -103,7 +103,7 @@ export default function Dashboard({ features = [] }) {
   }, [features]);
 
   const scoreDistribution = useMemo(() => {
-    const scored = features.filter((f) => (f.total || 0) > 0);
+    const scored = features.filter((f) => (f.scoreTotals?.length || 0) > 0);
     const buckets = {
       "0-20": 0,
       "21-40": 0,
