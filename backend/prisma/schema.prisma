@@ -21,6 +21,7 @@ model Admin {
   updatedFeatures FeatureRequest[]   @relation("UpdatedBy")
   logs            FeatureDecisionLog[]
   scoreAnswers    FeatureScoreAnswer[] @relation("AdminScoreAnswers")
+  featureAttachments FeatureAttachment[]
 
   @@map("admins")
 }
@@ -57,7 +58,7 @@ model FeatureRequest {
   id            Int      @id @default(autoincrement())
   code          String   @unique
   title         String?
-  summary       String?
+  summary       String?  @db.LongText
   pros          String?  // Make the case for doing this
   cons          String?  // Make the case for not doing this
   module        String?
@@ -69,6 +70,9 @@ model FeatureRequest {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  /// After first successful PUT (save), intro email is sent and this becomes true.
+  newFeatureNotifySent Boolean @default(false) @map("new_feature_notify_sent")
+
   // If you already had these relations in your old schema, keep them:
   createdByAdminId Int?   @map("created_by_admin_id")
   updatedByAdminId Int?   @map("updated_by_admin_id")
@@ -76,10 +80,28 @@ model FeatureRequest {
   createdBy Admin? @relation("CreatedBy", fields: [createdByAdminId], references: [id])
   updatedBy Admin? @relation("UpdatedBy", fields: [updatedByAdminId], references: [id])
 
-  answers   FeatureScoreAnswer[]
-  logs      FeatureDecisionLog[]
+  answers      FeatureScoreAnswer[]
+  logs         FeatureDecisionLog[]
+  attachments  FeatureAttachment[]
 
   @@map("feature_requests")
+}
+
+model FeatureAttachment {
+  id                  Int      @id @default(autoincrement())
+  featureId           Int      @map("feature_id")
+  objectKey           String   @map("object_key") @db.VarChar(768)
+  originalFilename    String   @map("original_filename") @db.VarChar(512)
+  mimeType            String?  @map("mime_type")
+  sizeBytes           Int      @map("size_bytes")
+  uploadedByAdminId Int?     @map("uploaded_by_admin_id")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  feature    FeatureRequest @relation(fields: [featureId], references: [id], onDelete: Cascade)
+  uploadedBy Admin?         @relation(fields: [uploadedByAdminId], references: [id])
+
+  @@index([featureId])
+  @@map("feature_attachments")
 }
 
 model FeatureScoreAnswer {

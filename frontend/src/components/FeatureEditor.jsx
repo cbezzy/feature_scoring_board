@@ -21,7 +21,37 @@ const DEFAULT_MODULES = [
   { label: "Integrations", value: "integrations" },
 ];
 
-export default function FeatureEditor({ admin, feature, onPatch, onPatchScores, onDelete }) {
+/** @returns {"image"|"pdf"|"video"|"audio"|"text"|"none"} */
+function attachmentPreviewKind(mime, filename) {
+  const m = (mime || "").toLowerCase();
+  const ext = (filename || "").split(".").pop()?.toLowerCase() || "";
+  if (m.startsWith("image/") || /^(gif|png|jpe?g|webp|svg|bmp|ico|avif)$/i.test(ext)) {
+    return "image";
+  }
+  if (m === "application/pdf" || ext === "pdf") return "pdf";
+  if (m.startsWith("video/") || /^(mp4|webm|ogv|mov)$/i.test(ext)) return "video";
+  if (m.startsWith("audio/") || /^(mp3|wav|ogg|m4a|aac|flac|opus)$/i.test(ext)) {
+    return "audio";
+  }
+  if (
+    m.startsWith("text/") ||
+    m === "application/json" ||
+    m === "application/xml" ||
+    /^(txt|csv|md|json|xml|log|yaml|yml|tsx?|jsx?|css|html?)$/i.test(ext)
+  ) {
+    return "text";
+  }
+  return "none";
+}
+
+export default function FeatureEditor({
+  admin,
+  feature,
+  onPatch,
+  onPatchScores,
+  onFeatureSync,
+  onDelete,
+}) {
   const [draft, setDraft] = useState(feature);
   const [tagInput, setTagInput] = useState("");
   const [questions, setQuestions] = useState([]);
@@ -29,6 +59,10 @@ export default function FeatureEditor({ admin, feature, onPatch, onPatchScores, 
   const [activeTab, setActiveTab] = useState("details"); // "details" | "scoring"
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [validationErrors, setValidationErrors] = useState({});
+  const [attachmentBusy, setAttachmentBusy] = useState(false);
+  const [attachmentError, setAttachmentError] = useState("");
+  const [attachmentPreview, setAttachmentPreview] = useState(null);
+  const [attachmentPreviewFailed, setAttachmentPreviewFailed] = useState(false);
 
   // local, editable answers map for the current admin
   const [localAnswers, setLocalAnswers] = useState({});
@@ -71,7 +105,21 @@ export default function FeatureEditor({ admin, feature, onPatch, onPatchScores, 
     setActiveTab("details");   // only when id changes
     setConfirmDelete(false);
     setValidationErrors({});
+    setAttachmentPreview(null);
+    setAttachmentPreviewFailed(false);
   }, [feature.id]);
+
+  useEffect(() => {
+    if (!attachmentPreview) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        setAttachmentPreview(null);
+        setAttachmentPreviewFailed(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [attachmentPreview]);
 
   // Check if scoring tab should be visible (both pros and cons have at least 20 chars)
   const canShowScoringTab = useMemo(() => {
@@ -160,6 +208,45 @@ export default function FeatureEditor({ admin, feature, onPatch, onPatchScores, 
 
   function updateField(key, val) {
     setDraft((d) => ({ ...d, [key]: val }));
+  }
+
+  async function syncFeatureFromServer() {
+    if (!onFeatureSync) return;
+    try {
+      const full = await api.getFeature(feature.id);
+      onFeatureSync(full);
+    } catch (e) {
+      console.error("syncFeatureFromServer failed:", e);
+    }
+  }
+
+  async function handleAttachmentSelected(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setAttachmentError("");
+    setAttachmentBusy(true);
+    try {
+      await api.uploadFeatureAttachment(feature.id, file);
+      await syncFeatureFromServer();
+    } catch (err) {
+      setAttachmentError(err.message || "Upload failed");
+    } finally {
+      setAttachmentBusy(false);
+    }
+  }
+
+  async function handleDeleteAttachment(attId) {
+    setAttachmentError("");
+    setAttachmentBusy(true);
+    try {
+      await api.deleteFeatureAttachment(feature.id, attId);
+      await syncFeatureFromServer();
+    } catch (err) {
+      setAttachmentError(err.message || "Delete failed");
+    } finally {
+      setAttachmentBusy(false);
+    }
   }
 
   async function saveDetails() {
@@ -556,9 +643,92 @@ export default function FeatureEditor({ admin, feature, onPatch, onPatchScores, 
                     padding: 8,
                     borderRadius: 8,
                     border: "1px solid #cbd5e1",
-                    minHeight: 80,
+                    minHeight: 120,
                   }}
                 />
+              </div>
+
+              <div style={{ marginTop: 16, gridColumn: "1 / -1" }}>
+                <label style={{ fontSize: 12 }}>Attachments</label>
+                <div
+                  style={{
+                    marginTop: 6,
+                    padding: 10,
+                    borderRadius: 8,
+                    border: "1px solid #cbd5e1",
+                    background: "#fafafa",
+                  }}
+                >
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                    <input
+                      type="file"
+                      disabled={attachmentBusy}
+                      onChange={handleAttachmentSelected}
+                      style={{ fontSize: 12 }}
+                    />
+                    {attachmentBusy && (
+                      <span style={{ fontSize: 12, color: "#64748b" }}>Working…</span>
+                    )}
+                  </div>
+                  {attachmentError && (
+                    <div style={{ fontSize: 12, color: "#dc2626", marginTop: 8 }}>
+                      {attachmentError}
+                    </div>
+                  )}
+                  <ul style={{ margin: "10px 0 0", paddingLeft: 18, fontSize: 13 }}>
+                    {(feature.attachments || []).map((att) => (
+                      <li key={att.id} style={{ marginBottom: 6 }}>
+                        <button
+                          type="button"
+                          disabled={!att.downloadUrl}
+                          onClick={() => {
+                            if (!att.downloadUrl) return;
+                            setAttachmentPreviewFailed(false);
+                            setAttachmentPreview(att);
+                          }}
+                          style={{
+                            padding: 0,
+                            border: "none",
+                            background: "none",
+                            font: "inherit",
+                            color: att.downloadUrl ? "#2563eb" : "#94a3b8",
+                            cursor: att.downloadUrl ? "pointer" : "not-allowed",
+                            textDecoration: att.downloadUrl ? "underline" : "none",
+                            textAlign: "left",
+                          }}
+                        >
+                          {att.originalFilename}
+                        </button>
+                        {att.sizeBytes != null && (
+                          <span style={{ color: "#64748b", marginLeft: 6 }}>
+                            ({Math.round(att.sizeBytes / 1024)} KB)
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          disabled={attachmentBusy}
+                          onClick={() => handleDeleteAttachment(att.id)}
+                          style={{
+                            marginLeft: 10,
+                            fontSize: 11,
+                            border: "none",
+                            background: "transparent",
+                            color: "#b91c1c",
+                            cursor: attachmentBusy ? "not-allowed" : "pointer",
+                            textDecoration: "underline",
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {!(feature.attachments || []).length && (
+                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>
+                      No files yet. Presigned links expire; refresh the page if a download stops working.
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div style={{ marginTop: 8, gridColumn: "1 / -1" }}>
@@ -778,7 +948,244 @@ export default function FeatureEditor({ admin, feature, onPatch, onPatchScores, 
         )}
       </div>
 
-      {/* Confirm Delete Modal */}
+      {/* Attachment preview modal */}
+      {attachmentPreview && attachmentPreview.downloadUrl && (
+        <div
+          onClick={() => {
+            setAttachmentPreview(null);
+            setAttachmentPreviewFailed(false);
+          }}
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            background: "rgba(15,23,42,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10000,
+            padding: 16,
+            boxSizing: "border-box",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "white",
+              borderRadius: 12,
+              width: "min(960px, 100%)",
+              maxHeight: "min(92vh, 900px)",
+              boxShadow: "0 12px 40px rgba(0,0,0,0.25)",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                padding: "14px 16px",
+                borderBottom: "1px solid #e2e8f0",
+                flexShrink: 0,
+              }}
+            >
+              <div style={{ minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 600,
+                    color: "#0f172a",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                  }}
+                  title={attachmentPreview.originalFilename}
+                >
+                  {attachmentPreview.originalFilename}
+                </div>
+                {attachmentPreview.mimeType && (
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                    {attachmentPreview.mimeType}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                <a
+                  href={attachmentPreview.downloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    fontSize: 13,
+                    padding: "6px 12px",
+                    borderRadius: 8,
+                    border: "1px solid #cbd5e1",
+                    color: "#0f172a",
+                    textDecoration: "none",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  Open in new tab
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAttachmentPreview(null);
+                    setAttachmentPreviewFailed(false);
+                  }}
+                  style={{
+                    fontSize: 13,
+                    padding: "6px 12px",
+                    borderRadius: 8,
+                    border: "1px solid #cbd5e1",
+                    background: "#f8fafc",
+                    cursor: "pointer",
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+            <div
+              style={{
+                padding: 16,
+                overflow: "auto",
+                flex: 1,
+                minHeight: 200,
+                background: "#f8fafc",
+              }}
+            >
+              {(() => {
+                const url = attachmentPreview.downloadUrl;
+                const name = attachmentPreview.originalFilename;
+                const kind = attachmentPreviewKind(
+                  attachmentPreview.mimeType,
+                  name
+                );
+
+                if (kind === "image" && !attachmentPreviewFailed) {
+                  return (
+                    <div style={{ textAlign: "center" }}>
+                      <img
+                        src={url}
+                        alt={name}
+                        onError={() => setAttachmentPreviewFailed(true)}
+                        style={{
+                          maxWidth: "100%",
+                          maxHeight: "min(72vh, 720px)",
+                          borderRadius: 8,
+                          boxShadow: "0 2px 12px rgba(0,0,0,0.08)",
+                        }}
+                      />
+                    </div>
+                  );
+                }
+
+                if (kind === "pdf") {
+                  return (
+                    <iframe
+                      title={name}
+                      src={url}
+                      style={{
+                        width: "100%",
+                        height: "min(72vh, 720px)",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 8,
+                        background: "white",
+                      }}
+                    />
+                  );
+                }
+
+                if (kind === "video") {
+                  return (
+                    <video
+                      src={url}
+                      controls
+                      style={{
+                        width: "100%",
+                        maxHeight: "min(72vh, 720px)",
+                        borderRadius: 8,
+                        background: "#000",
+                      }}
+                    />
+                  );
+                }
+
+                if (kind === "audio") {
+                  return (
+                    <div
+                      style={{
+                        padding: 24,
+                        background: "white",
+                        borderRadius: 8,
+                        border: "1px solid #e2e8f0",
+                      }}
+                    >
+                      <audio src={url} controls style={{ width: "100%" }} />
+                    </div>
+                  );
+                }
+
+                if (kind === "text") {
+                  return (
+                    <iframe
+                      title={name}
+                      src={url}
+                      style={{
+                        width: "100%",
+                        height: "min(72vh, 720px)",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: 8,
+                        background: "white",
+                      }}
+                    />
+                  );
+                }
+
+                return (
+                  <div
+                    style={{
+                      padding: 24,
+                      textAlign: "center",
+                      color: "#475569",
+                      fontSize: 14,
+                      background: "white",
+                      borderRadius: 8,
+                      border: "1px solid #e2e8f0",
+                    }}
+                  >
+                    {attachmentPreviewFailed && kind === "image" ? (
+                      <p style={{ margin: "0 0 12px" }}>
+                        Could not load image preview.
+                      </p>
+                    ) : (
+                      <p style={{ margin: "0 0 12px" }}>
+                        No in-app preview for this file type. Use{" "}
+                        <strong>Open in new tab</strong> to view or download.
+                      </p>
+                    )}
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: "#2563eb" }}
+                    >
+                      Open file
+                    </a>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm delete modal */}
       {confirmDelete && (
         <div
           onClick={() => setConfirmDelete(false)}

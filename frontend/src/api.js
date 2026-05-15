@@ -51,6 +51,33 @@ export const api = {
   deleteFeature: (id) =>
     request(`/features/${id}`, { method: "DELETE" }),
 
+  uploadFeatureAttachment: async (featureId, file) => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE}/features/${featureId}/attachments`, {
+      method: "POST",
+      body: form,
+      credentials: "include",
+    });
+    const text = await res.text();
+    let json;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = { raw: text };
+    }
+    if (!res.ok) {
+      const msg = json?.error || json?.message || res.statusText;
+      throw new Error(msg);
+    }
+    return json;
+  },
+
+  deleteFeatureAttachment: (featureId, attachmentId) =>
+    request(`/features/${featureId}/attachments/${attachmentId}`, {
+      method: "DELETE",
+    }),
+
   // ---- Scoring Questions + Answers ----
   listQuestions: () => request("/questions"),
   updateAnswers: (featureId, answers) =>

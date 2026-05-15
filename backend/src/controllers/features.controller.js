@@ -1,5 +1,35 @@
 const { PrismaClient } = require("@prisma/client");
+const { sendNewFeatureNotification, sendScoringCompleteNudge } = require("../services/mailgun");
+const {
+  getSignedDownloadUrl,
+  deleteObject,
+  spacesConfigured,
+} = require("../services/spaces");
+const { isAdminScoringComplete } = require("../utils/scoringCompletion");
 const prisma = new PrismaClient();
+
+async function withAttachmentUrls(feature) {
+  if (!feature) return feature;
+  const rows = feature.attachments || [];
+  if (!rows.length) {
+    return { ...feature, attachments: [] };
+  }
+  const attachments = await Promise.all(
+    rows.map(async (a) => {
+      let downloadUrl = null;
+      if (spacesConfigured()) {
+        try {
+          downloadUrl = await getSignedDownloadUrl(a.objectKey);
+        } catch (e) {
+          console.error("presign attachment failed:", e.message || e);
+        }
+      }
+      const { objectKey: _ok, ...rest } = a;
+      return { ...rest, downloadUrl };
+    })
+  );
+  return { ...feature, attachments };
+}
 
 function buildCutoffs(questions = []) {
   const totalPossible = questions.reduce((sum, q) => sum + (q.maxScore || 0), 0);
@@ -132,12 +162,14 @@ async function getFeature(req, res) {
         },
       },
       logs: { orderBy: { createdAt: "desc" }, take: 50 },
+      attachments: { orderBy: { createdAt: "asc" } },
     },
   });
   if (!feature) return res.status(404).json({ error: "Not found" });
 
   const cutoffs = await getScoreCutoffs();
-  res.json(withScoreSummary(feature, cutoffs));
+  const withUrls = await withAttachmentUrls(feature);
+  res.json(withScoreSummary(withUrls, cutoffs));
 }
 
 // POST /api/features
@@ -166,7 +198,6 @@ async function createFeature(req, res) {
       },
     });
 
-    const cutoffs = await getScoreCutoffs();
     const fresh = await prisma.featureRequest.findUnique({
       where: { id: feature.id },
       include: {
@@ -178,10 +209,18 @@ async function createFeature(req, res) {
             admin: { select: { id: true, name: true, email: true } },
           },
         },
+        attachments: { orderBy: { createdAt: "asc" } },
       },
     });
 
-    res.json(withScoreSummary(fresh, cutoffs));
+    if (!fresh) {
+      return res.status(500).json({ error: "Failed to load created feature" });
+    }
+
+    const cutoffs = await getScoreCutoffs();
+
+    const withUrls = await withAttachmentUrls(fresh);
+    res.json(withScoreSummary(withUrls, cutoffs));
   } catch (e) {
     console.error("createFeature error:", e);
     res.status(500).json({ error: "Failed to create feature" });
@@ -193,6 +232,16 @@ async function updateFeature(req, res) {
     const id = Number(req.params.id);
     const data = req.body || {};
     const adminId = req.admin?.id;
+
+    const prior = await prisma.featureRequest.findUnique({
+      where: { id },
+      select: { newFeatureNotifySent: true },
+    });
+    if (!prior) {
+      return res.status(404).json({ error: "Not found" });
+    }
+
+    const shouldSendIntroEmail = !prior.newFeatureNotifySent;
 
     const feature = await prisma.featureRequest.update({
       where: { id },
@@ -208,6 +257,7 @@ async function updateFeature(req, res) {
         tags: data.tags ?? undefined,
         decisionNotes: data.decisionNotes ?? undefined,
         updatedByAdminId: adminId || undefined,
+        ...(shouldSendIntroEmail ? { newFeatureNotifySent: true } : {}),
       },
       include: {
         createdBy: { select: { id: true, name: true, email: true } },
@@ -218,11 +268,33 @@ async function updateFeature(req, res) {
             admin: { select: { id: true, name: true, email: true } },
           },
         },
+        attachments: { orderBy: { createdAt: "asc" } },
       },
     });
 
+    if (shouldSendIntroEmail) {
+      const adminRows = await prisma.admin.findMany({
+        where: { isActive: true },
+        select: { email: true },
+      });
+      const recipientEmails = [
+        ...new Set(adminRows.map((a) => a.email).filter(Boolean)),
+      ];
+      void sendNewFeatureNotification(
+        {
+          id: feature.id,
+          code: feature.code,
+          title: feature.title,
+        },
+        recipientEmails
+      ).catch((err) =>
+        console.error("mailgun notify failed:", err.message || err)
+      );
+    }
+
     const cutoffs = await getScoreCutoffs();
-    res.json(withScoreSummary(feature, cutoffs));
+    const withUrls = await withAttachmentUrls(feature);
+    res.json(withScoreSummary(withUrls, cutoffs));
   } catch (e) {
     console.error("updateFeature error:", e);
     res.status(500).json({ error: e.message || "Internal Server Error" });
@@ -232,15 +304,26 @@ async function updateFeature(req, res) {
 
 async function deleteFeature(req, res) {
   const id = Number(req.params.id);
-  await prisma.featureRequest.delete({ where: { id }});
+  const keys = await prisma.featureAttachment.findMany({
+    where: { featureId: id },
+    select: { objectKey: true },
+  });
+  await prisma.featureRequest.delete({ where: { id } });
+  if (spacesConfigured()) {
+    for (const { objectKey } of keys) {
+      void deleteObject(objectKey).catch((e) =>
+        console.error("deleteObject cleanup failed:", e.message || e)
+      );
+    }
+  }
   res.json({ ok: true });
 }
 
 async function updateAnswers(req, res) {
   try {
     const featureId = Number(req.params.id);
-    const adminId = req.admin?.id;
-    if (!adminId) {
+    const adminId = Number(req.admin?.id);
+    if (!Number.isInteger(adminId) || adminId < 1) {
       return res.status(403).json({ error: "Admin context required" });
     }
 
@@ -252,7 +335,12 @@ async function updateAnswers(req, res) {
       }))
       .filter((a) => Number.isInteger(a.questionId));
 
+    let wasComplete = false;
     if (normalized.length) {
+      wasComplete = await isAdminScoringComplete(prisma, {
+        featureId,
+        adminId,
+      });
       const upserts = normalized.map((a) =>
         prisma.featureScoreAnswer.upsert({
           where: {
@@ -291,6 +379,67 @@ async function updateAnswers(req, res) {
 
     if (!feature) {
       return res.status(404).json({ error: "Feature not found" });
+    }
+
+    if (normalized.length) {
+      const nowComplete = await isAdminScoringComplete(prisma, {
+        featureId,
+        adminId,
+      });
+      if (!wasComplete && nowComplete) {
+        const admins = await prisma.admin.findMany({
+          where: { isActive: true },
+          select: { id: true, email: true },
+        });
+        const emails = [];
+        for (const a of admins) {
+          if (!a.email) continue;
+          const done = await isAdminScoringComplete(prisma, {
+            featureId,
+            adminId: a.id,
+          });
+          if (!done) emails.push(a.email);
+        }
+        const deduped = [...new Set(emails)];
+        const completedByName =
+          req.admin?.name || req.admin?.email || "Teammate";
+
+        // Nudge only admins who still owe scores. If everyone else already
+        // finished, this list is empty (e.g. you are the last finisher).
+        if (deduped.length === 0) {
+          console.info(
+            "[scoring-nudge] skip: no incomplete recipients",
+            JSON.stringify({
+              featureId,
+              code: feature.code,
+              completedByAdminId: adminId,
+              reason: "all_other_active_admins_already_completed",
+            })
+          );
+        } else {
+          console.info(
+            "[scoring-nudge] sending",
+            JSON.stringify({
+              featureId,
+              code: feature.code,
+              completedByAdminId: adminId,
+              recipientCount: deduped.length,
+            })
+          );
+        }
+
+        void sendScoringCompleteNudge(
+          {
+            id: feature.id,
+            code: feature.code,
+            title: feature.title,
+          },
+          completedByName,
+          deduped
+        ).catch((err) =>
+          console.error("mailgun scoring nudge failed:", err.message || err)
+        );
+      }
     }
 
     const cutoffs = await getScoreCutoffs();

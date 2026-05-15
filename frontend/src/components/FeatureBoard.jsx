@@ -33,10 +33,29 @@ export default function FeatureBoard({ admin, onLogout }) {
     }
   }
 
-  useEffect(() => { 
-    load(); 
+  useEffect(() => {
+    load();
     loadModules();
   }, []);
+
+  useEffect(() => {
+    if (!activeId) return;
+    let cancelled = false;
+    api
+      .getFeature(activeId)
+      .then((f) => {
+        if (cancelled) return;
+        setFeatures((prev) =>
+          prev.some((x) => x.id === f.id)
+            ? prev.map((x) => (x.id === f.id ? { ...x, ...f } : x))
+            : prev
+        );
+      })
+      .catch(console.error);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeId]);
 
   const filteredAndSorted = useMemo(() => {
     const s = search.trim().toLowerCase();
@@ -188,6 +207,7 @@ export default function FeatureBoard({ admin, onLogout }) {
                 feature={activeFeature}
                 onPatch={(payload) => patchFeature(activeFeature.id, payload)}
                 onPatchScores={replaceFeatureInList}
+                onFeatureSync={replaceFeatureInList}
                 onDelete={() => removeFeature(activeFeature.id)}
               />
             ) : (
