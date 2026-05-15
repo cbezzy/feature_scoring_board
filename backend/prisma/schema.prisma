@@ -59,14 +59,14 @@ model FeatureRequest {
   code          String   @unique
   title         String?
   summary       String?  @db.LongText
-  pros          String?  // Make the case for doing this
-  cons          String?  // Make the case for not doing this
+  pros          String?  @db.LongText // Make the case for doing this
+  cons          String?  @db.LongText // Make the case for not doing this
   module        String?
   status        String   @default("intake")
   requestedBy   String?
   tenant        String?
   tags          Json?
-  decisionNotes String?
+  decisionNotes String?  @db.LongText
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

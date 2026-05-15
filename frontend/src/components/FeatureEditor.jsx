@@ -21,6 +21,37 @@ const DEFAULT_MODULES = [
   { label: "Integrations", value: "integrations" },
 ];
 
+/** Keep in sync with backend LONG_TEXT_FIELD_MAX_CHARS (featureTextValidation.js). */
+const LONG_TEXT_FIELD_MAX_CHARS = 65535;
+const PROS_CONS_MIN_CHARS = 20;
+
+/** @returns {Record<string, string>} field key → message */
+function buildDetailsFieldErrors(draft) {
+  const errors = {};
+  const summary = draft.summary ?? "";
+  const pros = draft.pros ?? "";
+  const cons = draft.cons ?? "";
+  const notes = draft.decisionNotes ?? "";
+
+  if (summary.length > LONG_TEXT_FIELD_MAX_CHARS) {
+    errors.summary = `Summary cannot exceed ${LONG_TEXT_FIELD_MAX_CHARS.toLocaleString()} characters.`;
+  }
+  if (pros.length > LONG_TEXT_FIELD_MAX_CHARS) {
+    errors.pros = `Pros cannot exceed ${LONG_TEXT_FIELD_MAX_CHARS.toLocaleString()} characters.`;
+  } else if (pros.trim().length < PROS_CONS_MIN_CHARS) {
+    errors.pros = `Pros must be at least ${PROS_CONS_MIN_CHARS} characters (not counting leading or trailing spaces).`;
+  }
+  if (cons.length > LONG_TEXT_FIELD_MAX_CHARS) {
+    errors.cons = `Cons cannot exceed ${LONG_TEXT_FIELD_MAX_CHARS.toLocaleString()} characters.`;
+  } else if (cons.trim().length < PROS_CONS_MIN_CHARS) {
+    errors.cons = `Cons must be at least ${PROS_CONS_MIN_CHARS} characters (not counting leading or trailing spaces).`;
+  }
+  if (notes.length > LONG_TEXT_FIELD_MAX_CHARS) {
+    errors.decisionNotes = `Decision notes cannot exceed ${LONG_TEXT_FIELD_MAX_CHARS.toLocaleString()} characters.`;
+  }
+  return errors;
+}
+
 /** @returns {"image"|"pdf"|"video"|"audio"|"text"|"none"} */
 function attachmentPreviewKind(mime, filename) {
   const m = (mime || "").toLowerCase();
@@ -58,7 +89,6 @@ export default function FeatureEditor({
   const [modules, setModules] = useState([]);
   const [activeTab, setActiveTab] = useState("details"); // "details" | "scoring"
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [validationErrors, setValidationErrors] = useState({});
   const [attachmentBusy, setAttachmentBusy] = useState(false);
   const [attachmentError, setAttachmentError] = useState("");
   const [attachmentPreview, setAttachmentPreview] = useState(null);
@@ -104,7 +134,6 @@ export default function FeatureEditor({
     setTagInput("");
     setActiveTab("details");   // only when id changes
     setConfirmDelete(false);
-    setValidationErrors({});
     setAttachmentPreview(null);
     setAttachmentPreviewFailed(false);
   }, [feature.id]);
@@ -125,8 +154,14 @@ export default function FeatureEditor({
   const canShowScoringTab = useMemo(() => {
     const pros = (draft.pros || "").trim();
     const cons = (draft.cons || "").trim();
-    return pros.length >= 20 && cons.length >= 20;
+    return pros.length >= PROS_CONS_MIN_CHARS && cons.length >= PROS_CONS_MIN_CHARS;
   }, [draft.pros, draft.cons]);
+
+  const detailsFieldErrors = useMemo(
+    () => buildDetailsFieldErrors(draft),
+    [draft.summary, draft.pros, draft.cons, draft.decisionNotes]
+  );
+  const detailsFormValid = Object.keys(detailsFieldErrors).length === 0;
 
   useEffect(() => {
     const answers = feature.answers || [];
@@ -266,29 +301,18 @@ export default function FeatureEditor({
   }
 
   async function saveMeta(goToScoring = false) {
-    const errors = {};
-    const pros = (draft.pros || "").trim();
-    const cons = (draft.cons || "").trim();
-
-    if (pros.length < 20) {
-      errors.pros = "Pros must be at least 20 characters";
-    }
-    if (cons.length < 20) {
-      errors.cons = "Cons must be at least 20 characters";
-    }
-
-    if (Object.keys(errors).length > 0) {
-      setValidationErrors(errors);
-      return;
-    }
-
-    setValidationErrors({});
+    if (!detailsFormValid) return;
 
     await saveDetails();
 
     if (goToScoring && canShowScoringTab) {
       setActiveTab("scoring");
     }
+  }
+
+  async function handleSaveDetailsClick() {
+    if (!detailsFormValid) return;
+    await saveDetails();
   }
 
   function addTag() {
@@ -642,10 +666,30 @@ export default function FeatureEditor({
                     width: "100%",
                     padding: 8,
                     borderRadius: 8,
-                    border: "1px solid #cbd5e1",
+                    border: detailsFieldErrors.summary
+                      ? "1px solid #dc2626"
+                      : "1px solid #cbd5e1",
                     minHeight: 120,
                   }}
                 />
+                {detailsFieldErrors.summary && (
+                  <div style={{ fontSize: 11, color: "#dc2626", marginTop: 4 }}>
+                    {detailsFieldErrors.summary}
+                  </div>
+                )}
+                <div
+                  style={{
+                    fontSize: 11,
+                    marginTop: 4,
+                    color:
+                      (draft.summary || "").length > LONG_TEXT_FIELD_MAX_CHARS
+                        ? "#dc2626"
+                        : "#64748b",
+                  }}
+                >
+                  {(draft.summary || "").length.toLocaleString()} /{" "}
+                  {LONG_TEXT_FIELD_MAX_CHARS.toLocaleString()} characters maximum
+                </div>
               </div>
 
               <div style={{ marginTop: 16, gridColumn: "1 / -1" }}>
@@ -737,28 +781,41 @@ export default function FeatureEditor({
                 </label>
                 <textarea
                   value={draft.pros || ""}
-                  onChange={(e) => {
-                    updateField("pros", e.target.value);
-                    if (validationErrors.pros) {
-                      setValidationErrors((prev) => ({ ...prev, pros: undefined }));
-                    }
-                  }}
+                  onChange={(e) => updateField("pros", e.target.value)}
                   style={{
                     width: "100%",
                     padding: 8,
                     borderRadius: 8,
-                    border: validationErrors.pros ? "1px solid #dc2626" : "1px solid #cbd5e1",
+                    border: detailsFieldErrors.pros
+                      ? "1px solid #dc2626"
+                      : "1px solid #cbd5e1",
                     minHeight: 100,
                   }}
-                  placeholder="Minimum 20 characters required"
+                  placeholder={`At least ${PROS_CONS_MIN_CHARS} non-empty characters; ${LONG_TEXT_FIELD_MAX_CHARS.toLocaleString()} max`}
                 />
-                {validationErrors.pros && (
+                {detailsFieldErrors.pros && (
                   <div style={{ fontSize: 11, color: "#dc2626", marginTop: 4 }}>
-                    {validationErrors.pros}
+                    {detailsFieldErrors.pros}
                   </div>
                 )}
-                <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-                  {(draft.pros || "").length} / 20 characters minimum
+                <div
+                  style={{
+                    fontSize: 11,
+                    marginTop: 4,
+                    color: (() => {
+                      const len = (draft.pros || "").length;
+                      const trim = (draft.pros || "").trim().length;
+                      if (len > LONG_TEXT_FIELD_MAX_CHARS || trim < PROS_CONS_MIN_CHARS) {
+                        return "#dc2626";
+                      }
+                      return "#64748b";
+                    })(),
+                  }}
+                >
+                  {(draft.pros || "").length.toLocaleString()} /{" "}
+                  {LONG_TEXT_FIELD_MAX_CHARS.toLocaleString()} characters maximum
+                  {" · "}
+                  at least {PROS_CONS_MIN_CHARS} (excluding leading/trailing spaces)
                 </div>
               </div>
 
@@ -768,28 +825,41 @@ export default function FeatureEditor({
                 </label>
                 <textarea
                   value={draft.cons || ""}
-                  onChange={(e) => {
-                    updateField("cons", e.target.value);
-                    if (validationErrors.cons) {
-                      setValidationErrors((prev) => ({ ...prev, cons: undefined }));
-                    }
-                  }}
+                  onChange={(e) => updateField("cons", e.target.value)}
                   style={{
                     width: "100%",
                     padding: 8,
                     borderRadius: 8,
-                    border: validationErrors.cons ? "1px solid #dc2626" : "1px solid #cbd5e1",
+                    border: detailsFieldErrors.cons
+                      ? "1px solid #dc2626"
+                      : "1px solid #cbd5e1",
                     minHeight: 100,
                   }}
-                  placeholder="Minimum 20 characters required"
+                  placeholder={`At least ${PROS_CONS_MIN_CHARS} non-empty characters; ${LONG_TEXT_FIELD_MAX_CHARS.toLocaleString()} max`}
                 />
-                {validationErrors.cons && (
+                {detailsFieldErrors.cons && (
                   <div style={{ fontSize: 11, color: "#dc2626", marginTop: 4 }}>
-                    {validationErrors.cons}
+                    {detailsFieldErrors.cons}
                   </div>
                 )}
-                <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-                  {(draft.cons || "").length} / 20 characters minimum
+                <div
+                  style={{
+                    fontSize: 11,
+                    marginTop: 4,
+                    color: (() => {
+                      const len = (draft.cons || "").length;
+                      const trim = (draft.cons || "").trim().length;
+                      if (len > LONG_TEXT_FIELD_MAX_CHARS || trim < PROS_CONS_MIN_CHARS) {
+                        return "#dc2626";
+                      }
+                      return "#64748b";
+                    })(),
+                  }}
+                >
+                  {(draft.cons || "").length.toLocaleString()} /{" "}
+                  {LONG_TEXT_FIELD_MAX_CHARS.toLocaleString()} characters maximum
+                  {" · "}
+                  at least {PROS_CONS_MIN_CHARS} (excluding leading/trailing spaces)
                 </div>
               </div>
 
@@ -806,17 +876,65 @@ export default function FeatureEditor({
                     width: "100%",
                     padding: 8,
                     borderRadius: 8,
-                    border: "1px solid #cbd5e1",
-                    minHeight: 60,
+                    border: detailsFieldErrors.decisionNotes
+                      ? "1px solid #dc2626"
+                      : "1px solid #cbd5e1",
+                    minHeight: 80,
                   }}
                 />
+                {detailsFieldErrors.decisionNotes && (
+                  <div style={{ fontSize: 11, color: "#dc2626", marginTop: 4 }}>
+                    {detailsFieldErrors.decisionNotes}
+                  </div>
+                )}
+                <div
+                  style={{
+                    fontSize: 11,
+                    marginTop: 4,
+                    color:
+                      (draft.decisionNotes || "").length > LONG_TEXT_FIELD_MAX_CHARS
+                        ? "#dc2626"
+                        : "#64748b",
+                  }}
+                >
+                  {(draft.decisionNotes || "").length.toLocaleString()} /{" "}
+                  {LONG_TEXT_FIELD_MAX_CHARS.toLocaleString()} characters maximum
+                </div>
               </div>
 
+              {!detailsFormValid && (
+                <div
+                  role="alert"
+                  style={{
+                    gridColumn: "1 / -1",
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    background: "#fef2f2",
+                    border: "1px solid #fecaca",
+                    color: "#991b1b",
+                    fontSize: 13,
+                  }}
+                >
+                  <div style={{ fontWeight: 600, marginBottom: 6 }}>
+                    Fix the following before you can save or go to the Scoring tab:
+                  </div>
+                  <ul style={{ margin: 0, paddingLeft: 18 }}>
+                    {Object.entries(detailsFieldErrors).map(([key, msg]) => (
+                      <li key={key} style={{ marginBottom: 4 }}>
+                        {msg}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div
                 style={{
                   gridColumn: "1 / -1",       // spans the full width of the grid
                   display: "flex",
                   justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 10,
                   marginTop: 12,
                 }}
               >
@@ -839,14 +957,21 @@ export default function FeatureEditor({
                 {/* Right: Next or Save */}
                 {canShowScoringTab ? (
                   <button
+                    type="button"
+                    disabled={!detailsFormValid}
+                    title={
+                      !detailsFormValid
+                        ? Object.values(detailsFieldErrors)[0] || "Complete required fields"
+                        : undefined
+                    }
                     onClick={() => saveMeta(true)}
                     style={{
                       padding: "8px 12px",
                       borderRadius: 8,
                       border: "none",
-                      background: "#0f172a",
+                      background: detailsFormValid ? "#0f172a" : "#94a3b8",
                       color: "white",
-                      cursor: "pointer",
+                      cursor: detailsFormValid ? "pointer" : "not-allowed",
                       fontSize: 12,
                     }}
                   >
@@ -854,14 +979,21 @@ export default function FeatureEditor({
                   </button>
                 ) : (
                   <button
-                    onClick={saveDetails}
+                    type="button"
+                    disabled={!detailsFormValid}
+                    title={
+                      !detailsFormValid
+                        ? Object.values(detailsFieldErrors)[0] || "Complete required fields"
+                        : undefined
+                    }
+                    onClick={handleSaveDetailsClick}
                     style={{
                       padding: "8px 12px",
                       borderRadius: 8,
                       border: "none",
-                      background: "#0f172a",
+                      background: detailsFormValid ? "#0f172a" : "#94a3b8",
                       color: "white",
-                      cursor: "pointer",
+                      cursor: detailsFormValid ? "pointer" : "not-allowed",
                       fontSize: 12,
                     }}
                   >

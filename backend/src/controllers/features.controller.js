@@ -6,6 +6,7 @@ const {
   spacesConfigured,
 } = require("../services/spaces");
 const { isAdminScoringComplete } = require("../utils/scoringCompletion");
+const { longTextFieldsTooLongError } = require("../utils/featureTextValidation");
 const prisma = new PrismaClient();
 
 async function withAttachmentUrls(feature) {
@@ -178,6 +179,17 @@ async function createFeature(req, res) {
     const data = req.body || {};
     const adminId = req.admin?.id;
 
+    const textCheckPayload = {
+      summary: data.summary || "",
+      pros: data.pros || "",
+      cons: data.cons || "",
+      decisionNotes: data.decisionNotes || "",
+    };
+    const longErr = longTextFieldsTooLongError(textCheckPayload);
+    if (longErr) {
+      return res.status(400).json({ error: longErr });
+    }
+
     const code = data.code || `FR-${Date.now().toString(36).toUpperCase()}`;
 
     const feature = await prisma.featureRequest.create({
@@ -232,6 +244,11 @@ async function updateFeature(req, res) {
     const id = Number(req.params.id);
     const data = req.body || {};
     const adminId = req.admin?.id;
+
+    const longErr = longTextFieldsTooLongError(data);
+    if (longErr) {
+      return res.status(400).json({ error: longErr });
+    }
 
     const prior = await prisma.featureRequest.findUnique({
       where: { id },
